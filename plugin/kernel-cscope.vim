@@ -36,6 +36,10 @@ function! s:ErrorMsg(msg)
 	echohl NONE
 endfunc
 
+
+"----------------------------------------------------------------------
+" Traverse up to find the path having .git
+"----------------------------------------------------------------------
 function! s:get_project_root(path) abort
     let l:path = s:stripslash(a:path)
     let l:previous_path = ""
@@ -55,6 +59,7 @@ function! s:get_project_root(path) abort
     endwhile
     return ''
 endfunction
+
 
 "----------------------------------------------------------------------
 " list cscope dbs
@@ -96,6 +101,7 @@ function! s:list_cscope_dbs()
 	return records
 endfunc
 
+
 "----------------------------------------------------------------------
 " check db is connected
 "----------------------------------------------------------------------
@@ -112,6 +118,10 @@ function! s:db_connected(dbname)
 	return 0
 endfunc
 
+"
+"----------------------------------------------------------------------
+" add cscope db
+"----------------------------------------------------------------------
 function! s:cscope_db_add() abort
 	if b:cscope_db_file == '' || b:cscope_project_root == ''
 		call s:ErrorMsg("no database for this project, check documents")
@@ -141,8 +151,8 @@ function! s:cscope_db_add() abort
 		set cscopeverbose
 	endif
 endfunc
-
 command! -nargs=0 CscopeAdd call s:cscope_db_add()
+
 
 "----------------------------------------------------------------------
 " open quickfix
@@ -192,6 +202,10 @@ function! s:quickfix_open()
 	endif
 endfunc
 
+
+"----------------------------------------------------------------------
+" Execute cscope commands
+"----------------------------------------------------------------------
 function! s:cscope_find(bang, what, ...)
 	let keyword = (a:0 > 0)? a:1 : ''
 	let dbname = b:cscope_db_file
@@ -280,6 +294,7 @@ function! s:cscope_find(bang, what, ...)
 endfunc
 command! -nargs=+ -bang CscopeFind call s:cscope_find(<bang>0, <f-args>)
 
+
 "----------------------------------------------------------------------
 " Kill all connections
 "----------------------------------------------------------------------
@@ -290,6 +305,94 @@ endfunc
 
 command! -nargs=0 CscopeKill call s:cscope_kill()
 
+
+"----------------------------------------------------------------------
+" Switch between non-preview windows
+"----------------------------------------------------------------------
+function! s:switch_next_window()
+	function! s:WindowCheck()
+		if &previewwindow
+			return
+		endif
+		call add(s:window_id_list, win_getid())
+	endfunc
+
+	let s:window_id_list = []
+	let l:cur_winid = win_getid()
+	noautocmd windo call s:WindowCheck()
+	for l:index in range(0, len(s:window_id_list) - 1)
+		if s:window_id_list[l:index] == l:cur_winid
+			break
+		endif
+	endfor
+
+	let l:index += 1
+	if l:index >= len(s:window_id_list)
+		let l:index = 0
+	endif
+	call win_gotoid(s:window_id_list[l:index])
+endfunc
+command! -nargs=0 SwitchNextWindow call s:switch_next_window()
+
+
+"----------------------------------------------------------------------
+" Toggle preview window
+"----------------------------------------------------------------------
+let s:quickfix_last_line = -1
+function! s:toggle_preview_window()
+	function! s:get_quickfix_window()
+		if &buftype == "quickfix"
+			let s:qf_winnr = winnr()
+		endif
+	endfunc
+	let l:cur_winnr = winnr()
+	let s:qf_winnr = -1
+	noautocmd windo call s:get_quickfix_window()
+	if s:qf_winnr == -1
+		return
+	endif
+	noautocmd exec ''.s:qf_winnr.'wincmd w'
+	let l:linenr = line('.')
+	if l:linenr == 0
+		let l:linernr = 1
+	endif
+	noautocmd exec ''.l:cur_winnr.'wincmd w'
+	let l:pid = preview#preview_check()
+	if l:pid == 0 || l:linenr != s:quickfix_last_line
+		call preview#preview_quickfix(l:linenr)
+		let s:quickfix_last_line = l:linenr
+		return
+	endif
+	silent pclose
+endfunc
+command! -nargs=0 TogglePreviewWindow call s:toggle_preview_window()
+
+
+"----------------------------------------------------------------------
+" Scroll one line for preview window
+"----------------------------------------------------------------------
+function! s:preview_scroll_one_line(str_offset)
+	let offset = str2nr(a:str_offset)
+	let pid = preview#preview_check()
+	if pid <= 0
+		exec "norm! \<esc>"
+		return
+	endif
+
+	noautocmd wincmd P
+	if offset == 1
+		exec "normal! \<c-e>"
+	elseif offset == -1
+		exec "normal! \<c-y>"
+	endif
+	noautocmd wincmd p
+endfunc
+command! -nargs=1 PreviewScrollOneLine call s:preview_scroll_one_line(<f-args>)
+
+
+"----------------------------------------------------------------------
+" Initialize cscope db and project root path
+"----------------------------------------------------------------------
 function! s:setup_cscope() abort
 	if &buftype != ''
 		return
@@ -303,11 +406,13 @@ function! s:setup_cscope() abort
 	endif
 endfunc
 
+
 augroup cscope_detect
     autocmd!
     autocmd BufNewFile,BufReadPost,BufEnter *  call s:setup_cscope()
     autocmd VimEnter               *  if expand('<amatch>')==''|call s:setup_cscope()|endif
 augroup end
+
 
 "----------------------------------------------------------------------
 " setup keymaps
