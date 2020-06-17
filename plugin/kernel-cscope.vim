@@ -145,8 +145,8 @@ function! s:cscope_db_add() abort
 	let $CSCOPE_PRE_PATH = b:cscope_project_root
 	set nocscopeverbose
 	silent exec 'cs kill -1'
-	"exec 'cs add '. fnameescape(b:cscope_db_file) . ' ' . fnameescape(b:cscope_project_root)
-	exec 'cs add '. fnameescape(b:cscope_db_file)
+	exec 'cs add '. fnameescape(b:cscope_db_file) . ' ' . fnameescape(b:cscope_project_root)
+	"exec 'cs add '. fnameescape(b:cscope_db_file)
 	if value != 0
 		set cscopeverbose
 	endif
@@ -404,13 +404,16 @@ function! s:setup_cscope() abort
 	else
 		let b:cscope_db_file = ''
 	endif
+	if filereadable(b:cscope_db_file)
+		call s:cscope_db_add()
+	endif
 endfunc
 
 
 augroup cscope_detect
     autocmd!
     autocmd BufNewFile,BufReadPost,BufEnter *  call s:setup_cscope()
-    autocmd VimEnter               *  if expand('<amatch>')==''|call s:setup_cscope()|endif
+"    autocmd VimEnter               *  if expand('<amatch>')==''|call s:setup_cscope()|endif
 augroup end
 
 
